@@ -1,0 +1,270 @@
+<html>
+<head>
+<meta charset="utf-8">
+
+<script type="text/javascript" src="blockly/blockly_compressed.js"></script>
+<script type="text/javascript" src="blockly/generators/javascript.js"></script>
+
+<script type="text/javascript" src="blockly/generators/javascript/math.js"></script>
+
+<script type="text/javascript" src="sample.js"></script>
+<script type="text/javascript" src="language.js"></script>
+<script type="text/javascript" src="blockly/language/en/_messages.js"></script>
+<script type="text/javascript" src="blockly/language/common/math.js"></script>
+
+<!--
+<script type="text/javascript" src="blockly/generators/javascript/control.js"></script>
+<script type="text/javascript" src="blockly/generators/javascript/logic.js"></script>
+<script type="text/javascript" src="blockly/language/common/control.js"></script>
+<script type="text/javascript" src="blockly/language/common/logic.js"></script>
+-->
+
+<script>
+var xmlPanelDelegate = {'onOk':null, 'onCancel':null};
+
+function xmlPabelOKClicked() {
+	if(!xmlPanelDelegate.onOk || typeof(xmlPanelDelegate.onOk) != 'function') {
+		closeXMLPanel();
+	}
+	else {
+		xmlPanelDelegate.onOk();
+	}
+}
+function xmlPabelCancelClicked() {
+	if(!xmlPanelDelegate.onCancel || typeof(xmlPanelDelegate.onCancel) != 'function') {
+		closeXMLPanel();
+	}
+	else {
+		xmlPanelDelegate.onCancel();
+	}
+}
+
+function showXMLPanel(msgtxt, srctxt, onok, oncancel) {
+	//console.log("show XML");
+	xmlPanelDelegate.onOk = onok;
+	xmlPanelDelegate.onCancel = oncancel;
+	
+	document.getElementById('xmlTextArea').value = srctxt;
+	
+	var xmlarea = document.getElementById('xmlPanel');
+	xmlarea.style.display = 'block';
+}
+function closeXMLPanel() {
+	console.log("close XML");
+	var xmlarea = document.getElementById('xmlPanel');
+	xmlarea.style.display = 'none';
+}
+
+/////
+function clearWorkspace() {
+	// clear and load default
+	// console.log("clear");
+	if(window.confirm('Clear workspace?')) {
+		Blockly.mainWorkspace.clear();
+	}
+}
+
+function showXML() {
+	var dom = Blockly.Xml.workspaceToDom(Blockly.mainWorkspace);
+	//showXMLPanel("", Blockly.Xml.domToText(dom), null, null);
+	dom = Blockly.Xml.domToPrettyText(dom);
+	
+	if(window.parent.showOverlayTextArea) {
+		window.parent.showOverlayTextArea(
+			"Current Blockly code as XML",
+			dom,
+			"OK", null,
+			null, null, true
+		);
+	}
+	else {
+		showXMLPanel("", dom, null, null);
+	}
+}
+
+function loadXML() {
+	//console.log("load XML");
+	if(window.parent.showOverlayTextArea) {
+		window.parent.showOverlayTextArea(
+			"Load Blockly XML code",
+			"Input XML here",
+			"Load", loadXMLSrcInput,
+			"Cancel", null, true
+		);
+	}
+	else {
+		showXMLPanel("", "", loadXMLSrcInput, null);
+	}
+}
+function loadXMLSrcInput(xmlsrc) {
+	if(!xmlsrc) {
+		xmlsrc = document.getElementById('xmlTextArea').value;
+		closeXMLPanel();
+	}
+	// alert("xml src:" + xmlsrc);
+	if(xmlsrc) {
+		Blockly.mainWorkspace.clear();
+		var xmldom = Blockly.Xml.textToDom(xmlsrc);
+		Blockly.Xml.domToWorkspace(Blockly.mainWorkspace, xmldom);
+		
+		LCodeEditor.rebuildSymbolDataBase(Blockly.mainWorkspace);
+	}
+}
+
+function toJavascript() {
+	var jscode = getJavaScriptSource();
+	if(window.parent.sendLSystemSource) {
+		window.parent.sendLSystemSource(jscode);
+	}
+	else {
+		showXMLPanel("", jscode, null, null);
+	}
+}
+
+function getJavaScriptSource() {
+	return Blockly.Generator.workspaceToCode('JavaScript');
+}
+
+/*
+function selectedBlockChanged(e) {
+	console.log("selection changed");
+}
+*/
+/////
+function initEditor() {
+	//console.log("init editor");
+	var rootdom = document.getElementById('editorArea');
+	Blockly.inject(rootdom, {'path': "blockly/"});
+	
+	// clear workspace by a trashcan clicked.
+	//Blockly.mainWorkspace.trashcan.svgGroup_.addEventListener('click', clearWorkspace);
+	var trashsvg = Blockly.mainWorkspace.trashcan.svgGroup_;
+	Blockly.bindEvent_(trashsvg, 'click', null, clearWorkspace);
+	
+	// append show xml / load xml buttons on toolbox
+	var offset = Blockly.Toolbox.svgOptions_.childElementCount * Blockly.ContextMenu.Y_HEIGHT;
+	offset += Blockly.ContextMenu.Y_HEIGHT * 2;
+	var rootsvg = Blockly.createSvgElement('g',
+		{'class': 'blocklyToolboxOptions',
+		'transform': 'translate(0, ' + offset + ')'},
+		Blockly.Toolbox.svgGroup_);
+	Blockly.Toolbox.svgGroup_.appendChild(rootsvg);
+	var svgbtns = [
+		{'title':"XML", 'action':showXML, 'margin_y':0},
+		{'title':"Load", 'action':loadXML, 'margin_y':0},
+		{'title':"Eval", 'action':toJavascript, 'margin_y':Blockly.ContextMenu.Y_HEIGHT}
+	];
+	var cy = 0;
+	for(var i = 0; i < svgbtns.length; i++) {
+		var btnelm = Blockly.ContextMenu.optionToDom(svgbtns[i].title);
+		rootsvg.appendChild(btnelm);
+		btnelm.firstChild.setAttribute('width', Blockly.Toolbox.width);
+		cy += svgbtns[i].margin_y
+		btnelm.setAttribute('transform', 'translate(0, ' + cy + ')');
+		Blockly.bindEvent_(btnelm, 'click', null, svgbtns[i].action);
+		cy += Blockly.ContextMenu.Y_HEIGHT;
+	}
+	
+	var tmpdom;
+	tmpdom = document.getElementById('xmlPanel');
+	tmpdom.addEventListener('click', closeXMLPanel);
+	tmpdom = document.getElementById('xmlBG');
+	tmpdom.addEventListener('click', function (e) {
+		//console.log("xmlBG clicked");
+		e.stopPropagation();
+		//e.preventDefault();
+	});
+	//window.addEventListener('blocklySelectChange', selectedBlockChanged);
+
+	loadXMLSrcInput(sample_xml);
+}
+window.addEventListener('load', initEditor);
+</script>
+
+<style>
+html, body {
+	background-color: #fff;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+}
+.blocklySVG {
+	height: 100%;
+	width: 100%;
+	background-color: #fff;
+}
+#editorArea {
+	height: 100%;
+	width: 100%;
+}
+#buttonPanel {
+	position: absolute;
+	left: 0;
+	bottom: 0;
+	width: 72;
+	background-color: rgba(64, 0, 0, 0.5);
+}
+button.buttonPanelItem {
+	padding: 4px 0px;
+	margin: 4px 2px;
+	width: 68;
+}
+
+#xmlPanel {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	display: none;
+	background-color: rgba(0, 0, 0, 0.5);
+}
+#xmlBG {
+	margin: 20px auto;
+	width: 85%;
+	height: 85%;
+	padding: 20px;
+	background-color: rgba(64, 64, 64, 0.8);
+	border: 1px solid #000;
+	border-radius: 10px;
+	//-webkit-border-radius: 12px;
+}
+#xmlTextArea {
+	margin: auto;
+	width: 100%;
+	height: 100%;
+}
+button.xmlPanelItem {
+	padding: 6px 4px;
+	margin: 6px 4px;
+	width: 100px;
+	height: 34px;
+}
+</style>
+
+</head>
+<body>
+<div id="editorArea"></div>
+</body>
+<!-- div id="buttonPanel">
+<button type="button" class="buttonPanelItem" onclick="clearWorkspace()">Clear</button><br>
+<br>
+<button type="button" class="buttonPanelItem" onclick="showXML()">XML</button><br>
+<button type="button" class="buttonPanelItem" onclick="loadXML()">Load</button><br>
+<br>
+<button type="button" class="buttonPanelItem" onclick="toJavascript()">JS</button>
+</div -->
+<div id="xmlPanel">
+	<div id="xmlBG">
+	<table width="100%" height="100%">
+	<tr><td>
+	<textarea id="xmlTextArea"></textarea>
+	</td></tr>
+	<tr height="50px" style="text-align:right;"><td>
+	<button type="button" class="xmlPanelItem" onclick="xmlPabelOKClicked()">OK</button>
+	<button type="button" class="xmlPanelItem" onclick="xmlPabelCancelClicked()">Cancel</button>
+	</td></tr>
+	</table>
+	</div>
+</div>
+</html>

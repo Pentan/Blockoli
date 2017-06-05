@@ -1,0 +1,24 @@
+body {
+	margin: 0 0;
+	background: #f00;
+}
+.contentDiv {
+	//width: 100%;
+	//height: 100%;
+	margin: 0 0;
+	border: 1px solid #000;
+}
+#threeContent {
+	position: absolute;
+	//float right;
+	left: 50%;
+	width: 30%;
+	height: 30%;
+	background: rgba(128, 128, 0, 0.5);
+}
+#blocklyContent {
+	margin: auto;
+	width: 99%;
+	height: 99%;
+	background: rgba(0, 0, 128, 0.5);
+}

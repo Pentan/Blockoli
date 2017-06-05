@@ -1,8 +1,167 @@
 <html>
 <head>
+<meta charset="utf-8">
+
 <title>Blockoli</title>
+
+<script>
+function getLSystemSource() {
+	var editorframe = document.getElementById('editorFrame');
+	return editorframe.contentWindow.getJavaScriptSource();
+}
+
+function sendLSystemSource(srctxt) {
+	var viewerframe = document.getElementById('viewerFrame');
+	return viewerframe.contentWindow.setLSystemSource(srctxt);
+}
+
+//
+var OverlayPanel = {};
+/*
+args
+	value: string,
+	positiveText: string,
+	positiveClicked: function (value:string),
+	negativeText: string,
+	negativeClicked: function  (value:string),
+	isSelected: bool
+*/
+function showOverlayTextArea(message, value, positiveText, positiveClicked, negativeText, negativeClicked, isSelected) {
+	if(OverlayPanel.panel.style.display == 'block') return;
+	
+	OverlayPanel.message.innerHTML = message;
+	OverlayPanel.textArea.value = value;
+	
+	var posclicked = function () {
+		if(positiveClicked) {
+			positiveClicked(OverlayPanel.textArea.value);
+		}
+		cleanup();
+	};
+	var negclicked = function () {
+		if(negativeClicked) {
+			negativeClicked(OverlayPanel.textArea.value);
+		}
+		cleanup();
+	};
+	var cleanup = function () {
+		OverlayPanel.panel.style.display = 'none';
+		OverlayPanel.positiveButton.removeEventListener('click', posclicked);
+		OverlayPanel.negativeButton.removeEventListener('click', negclicked);
+	};
+	
+	if(!positiveText || positiveText.length <= 0) {
+		positiveText = 'OK';
+	}
+	OverlayPanel.positiveButton.innerText = positiveText;
+	OverlayPanel.positiveButton.addEventListener('click', posclicked);
+	
+	OverlayPanel.negativeButton.innerText = negativeText;
+	OverlayPanel.negativeButton.addEventListener('click', negclicked);
+	OverlayPanel.negativeButton.style.visibility = negativeText? 'visible':'hidden';
+	
+	OverlayPanel.panel.style.display = 'block';
+	
+	if(isSelected == true) {
+		OverlayPanel.textArea.focus();
+		OverlayPanel.textArea.select();
+	}
+}
+
+function init() {
+	//console.log('init invoked');
+	// var blocklytarget = document.getElementById('blocklyContent');
+	// var threetarget = document.getElementById('threeContent');
+	OverlayPanel.panel = document.getElementById("overlayPanel");
+	OverlayPanel.textArea = document.getElementById("overlayTextArea");
+	OverlayPanel.message = document.getElementById("overlayMessage");
+	OverlayPanel.positiveButton = document.getElementById("overlayPositiveButton");
+	OverlayPanel.negativeButton = document.getElementById("overlayNegativeButton");
+	
+	OverlayPanel.panel.addEventListener('click', function(e) {
+		e.stopPropagation();
+	});
+	/*
+	showOverlayTextArea(
+		"Some message text",
+		"Some value text",
+		"YES",
+		function (v) { console.log("YES:" + v); },
+		"NO",
+		function (v) { console.log("NO:" + v); }
+	);
+	*/
+}
+window.addEventListener('load', init);
+
+</script>
+
+<style>
+body {
+	background-color: #ccc;
+}
+table {
+	width: 100%;
+	height: 100%;
+}
+iframe {
+	width: 100%;
+	height: 100%;
+	border: 1px solid #000;
+}
+
+#overlayPanel {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	display: none;
+	background-color: rgba(0, 0, 0, 0.5);
+}
+#overlayTable {
+	margin: auto;
+	padding: 20px;
+	width: 100%;
+	height: 100%;
+}
+#overlayMessage {
+	color: #fff;
+	font-weight: bold;
+	padding: 0px 4px;
+}
+#overlayTextArea {
+	margin: auto;
+	width: 100%;
+	height: 100%;
+}
+button.olButton {
+	padding: 6px 10px;
+	margin: 4px 8px;
+}
+
+</style>
+
 </head>
 <body>
-<h1>Blockoli</h1>
+<table>
+<tr>
+<td width="50%"><iframe id="viewerFrame" src="viewer.html"></iframe></td>
+<td width="50%"><iframe id="editorFrame" src="editor.html"></iframe></td>
+</tr>
+</table>
+<!-- overlay -->
+<div id="overlayPanel">
+<table id="overlayTable">
+<tr style="height:4ex;background-color:black;"><td><div id="overlayMessage">Message</div></td></tr>
+<tr><td>
+<textarea id="overlayTextArea"></textarea>
+</td></tr>
+<tr style="height:6ex;text-align:right;background-color:black;"><td>
+<button type="button" id="overlayNegativeButton" class="olButton">Negative</button>
+<button type="button" id="overlayPositiveButton" class="olButton">Positive</button>
+</td></tr>
+</table>
+</div>
 </body>
 </html>

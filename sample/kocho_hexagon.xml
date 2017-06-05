@@ -1,0 +1,165 @@
+<xml>
+  <block type="lsystem_symbol_def" x="19" y="109">
+    <title name="NAME">A</title>
+    <statement name="RULES">
+      <block type="lsystem_symbol_ref">
+        <title name="SYMBOL">A</title>
+        <next>
+          <block type="lsystem_rotate_axis" inline="false">
+            <title name="AXIS">Z</title>
+            <value name="ANGLE">
+              <block type="math_number">
+                <title name="NUM">60</title>
+              </block>
+            </value>
+            <next>
+              <block type="lsystem_symbol_ref">
+                <title name="SYMBOL">A</title>
+                <next>
+                  <block type="lsystem_rotate_axis" inline="false">
+                    <title name="AXIS">Z</title>
+                    <value name="ANGLE">
+                      <block type="math_number">
+                        <title name="NUM">-120</title>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="lsystem_symbol_ref">
+                        <title name="SYMBOL">A</title>
+                        <next>
+                          <block type="lsystem_rotate_axis" inline="false">
+                            <title name="AXIS">Z</title>
+                            <value name="ANGLE">
+                              <block type="math_number">
+                                <title name="NUM">60</title>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="lsystem_symbol_ref">
+                                <title name="SYMBOL">A</title>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="VISUALS">
+      <block type="visualize_line" inline="false">
+        <title name="COLOR">#ffcc99</title>
+        <value name="LENGTH">
+          <block type="math_number">
+            <title name="NUM">1</title>
+          </block>
+        </value>
+        <value name="WIDTH">
+          <block type="math_number">
+            <title name="NUM">1</title>
+          </block>
+        </value>
+      </block>
+    </statement>
+    <next>
+      <block type="lsystem_init">
+        <title name="STEPS">4</title>
+        <statement name="INIT_STATE">
+          <block type="lsystem_rotate_axis" inline="false">
+            <title name="AXIS">Z</title>
+            <value name="ANGLE">
+              <block type="math_number">
+                <title name="NUM">-60</title>
+              </block>
+            </value>
+            <next>
+              <block type="lsystem_symbol_ref">
+                <title name="SYMBOL">A</title>
+                <next>
+                  <block type="lsystem_rotate_axis" inline="false">
+                    <title name="AXIS">Z</title>
+                    <value name="ANGLE">
+                      <block type="math_number">
+                        <title name="NUM">60</title>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="lsystem_symbol_ref">
+                        <title name="SYMBOL">A</title>
+                        <next>
+                          <block type="lsystem_rotate_axis" inline="false">
+                            <title name="AXIS">Z</title>
+                            <value name="ANGLE">
+                              <block type="math_number">
+                                <title name="NUM">60</title>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="lsystem_symbol_ref">
+                                <title name="SYMBOL">A</title>
+                                <next>
+                                  <block type="lsystem_rotate_axis" inline="false">
+                                    <title name="AXIS">Z</title>
+                                    <value name="ANGLE">
+                                      <block type="math_number">
+                                        <title name="NUM">60</title>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="lsystem_symbol_ref">
+                                        <title name="SYMBOL">A</title>
+                                        <next>
+                                          <block type="lsystem_rotate_axis" inline="false">
+                                            <title name="AXIS">Z</title>
+                                            <value name="ANGLE">
+                                              <block type="math_number">
+                                                <title name="NUM">60</title>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="lsystem_symbol_ref">
+                                                <title name="SYMBOL">A</title>
+                                                <next>
+                                                  <block type="lsystem_rotate_axis" inline="false">
+                                                    <title name="AXIS">Z</title>
+                                                    <value name="ANGLE">
+                                                      <block type="math_number">
+                                                        <title name="NUM">60</title>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="lsystem_symbol_ref">
+                                                        <title name="SYMBOL">A</title>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+      </block>
+    </next>
+  </block>
+</xml>

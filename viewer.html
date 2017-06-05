@@ -1,0 +1,1090 @@
+<html>
+<head>
+<meta charset="utf-8">
+
+<script type="text/javascript" src="three/Three.js"></script>
+<script type="text/javascript" src="three/TrackballControlsB.js"></script>
+<script type="text/javascript" src="lsystem.js"></script>
+
+<script>
+// THREE extention
+function extendTHREE() {
+	// Vector3 extention
+	THREE.Vector3.prototype.chooseMax = function (v) {
+		this.x = Math.max(this.x, v.x);
+		this.y = Math.max(this.y, v.y);
+		this.z = Math.max(this.z, v.z);
+	};
+	THREE.Vector3.prototype.chooseMin = function (v) {
+		this.x = Math.min(this.x, v.x);
+		this.y = Math.min(this.y, v.y);
+		this.z = Math.min(this.z, v.z);
+	};
+	// Matrix4 extention
+	THREE.Matrix4.prototype.getRowX = function () {
+		var te = this.elements;
+		return THREE.Matrix4.__v1.set( te[0], te[4], te[8] );
+	};
+	THREE.Matrix4.prototype.getRowY = function () {
+		var te = this.elements;
+		return THREE.Matrix4.__v1.set( te[1], te[5], te[9] );
+	};
+	THREE.Matrix4.prototype.getRowZ = function() {
+		var te = this.elements;
+		return THREE.Matrix4.__v1.set( te[2], te[6], te[10] );
+	};
+	THREE.Matrix4.prototype.normalizeRotation = function() {
+		var v, te = this.elements;
+		v = this.getColumnX().normalize();
+		te[0] = v.x; te[1] = v.y; te[2] = v.z;
+		v = this.getColumnY().normalize();
+		te[4] = v.x; te[5] = v.y; te[6] = v.z;
+		v = this.getColumnZ().normalize();
+		te[8] = v.x; te[9] = v.y; te[10] = v.z;
+		return this;
+	};
+	// Face extention
+	THREE.Face3.prototype.flip = function () {
+		var tmp = this.a;
+		this.a = this.c;
+		this.c = tmp;
+		this.normal.negate();
+		return this;
+	};
+	THREE.Face4.prototype.flip = function () {
+		var tmp = this.a;
+		this.a = this.d;
+		this.d = tmp;
+		tmp = this.b;
+		this.b = this.c;
+		this.c = tmp;
+		this.normal.negate();
+		return this;
+	};
+}
+
+//
+var TurtleTransform = function () {
+	this.translation = new THREE.Vector3();
+	this.rotation = new THREE.Matrix4();
+	this.scale = new THREE.Vector3();
+	this.rotateCount_ = 0;
+};
+TurtleTransform.ROTATE_NORMALIZE_INTERVAL = 100;
+
+TurtleTransform.prototype.clone = function () {
+	var ret = new TurtleTransform();
+	ret.translation.copy(this.translation);
+	ret.rotation.copy(this.rotation);
+	ret.scale.copy(this.scale);
+	ret.rotateCount_ = this.rotateCount_;
+	return ret;
+};
+TurtleTransform.prototype.identity = function () {
+	this.translation.set(0.0, 0.0, 0.0);
+	this.rotation.identity();
+	this.scale.set(1.0, 1.0, 1.0);
+};
+TurtleTransform.prototype.applyTranslate = function (dx, dy, dz) {
+	this.translation.x += dx;
+	this.translation.y += dy;
+	this.translation.z += dz;
+};
+TurtleTransform.prototype.applyRotate = function (axisv3, angle) {
+	this.rotation.rotateByAxis(axisv3, angle);
+	if(++this.rotateCount_ > TurtleTransform.ROTATE_NORMALIZE_INTERVAL) {
+		this.rotation.normalizeRotation();
+		this.rotateCount_ = 0;
+		//console.log("rotate matrix normalized"); //+++++
+	}
+};
+TurtleTransform.prototype.applyScale = function (sx, sy, sz) {
+	this.scale.x *= sx;
+	this.scale.y *= sy;
+	this.scale.z *= sz;
+};
+TurtleTransform.prototype.makeMatrix = function (m) {
+	m.copy(this.rotation);
+	m.setPosition(this.translation);
+	m.scale(this.scale);
+};
+
+//
+var TransformStack = function () {
+	this.stack_ = [];
+	this.stack_.push(new TurtleTransform());
+	this.top = this.stack_[0];
+};
+TransformStack.prototype.clear = function (t) {
+	while(this.stack_.length > 1) {
+		this.stack_.pop();
+	}
+	this.stack_[0].identity();
+	this.top = this.stack_[0];
+};
+TransformStack.prototype.push = function (t) {
+	if(!t) {
+		t = this.top.clone();
+	}
+	this.stack_.push(t);
+	this.top = t;
+	return t;
+};
+TransformStack.prototype.pop = function () {
+	var t = this.stack_.pop();
+	this.top = this.stack_[this.stack_.length - 1];
+	return t;
+};
+
+var TurtleByTHREE = {
+	'transformStack': new TransformStack(),
+	'materials': null, // indexed by color.
+	'root': null, // LSystem result's root
+	//
+	'movedAABB': {
+		'min': new THREE.Vector3(-1.0, -1.0, -1.0),
+		'max': new THREE.Vector3(1.0, 1.0, 1.0),
+		'obj': null
+	},
+	'work':{
+		'v30': new THREE.Vector3(),
+		'v31': new THREE.Vector3(),
+		'm40': new THREE.Matrix4(),
+		'm41': new THREE.Matrix4()
+	}
+};
+TurtleByTHREE.reset = function () {
+	TurtleByTHREE.transformStack.clear();
+	TurtleByTHREE.materials = {};
+	TurtleByTHREE.root = new THREE.Object3D();
+	TurtleByTHREE.movedAABB.min.set(Number.MAX_VALUE, Number.MAX_VALUE, Number.MAX_VALUE);
+	TurtleByTHREE.movedAABB.max.set(Number.MIN_VALUE, Number.MIN_VALUE, Number.MIN_VALUE);
+	if(!TurtleByTHREE.movedAABB.obj) {
+		var geom = new THREE.CubeGeometry(1.0, 1.0, 1.0);
+		var mat = new THREE.MeshBasicMaterial({'color':0xff0000, 'wireframe':true});
+		TurtleByTHREE.movedAABB.obj = new THREE.Mesh(geom, mat);
+	}
+	else {
+		if(TurtleByTHREE.movedAABB.obj.parent) {
+			TurtleByTHREE.movedAABB.obj.parent.remove(TurtleByTHREE.movedAABB.obj);
+		}
+	}
+};
+TurtleByTHREE.translate = function (dx, dy, dz) {
+	var wv = TurtleByTHREE.work.v30;
+	var toptf = TurtleByTHREE.transformStack.top;
+	wv.set(dx * toptf.scale.x, dy * toptf.scale.y, dz * toptf.scale.z);
+	toptf.rotation.multiplyVector3(wv);
+	toptf.applyTranslate(wv.x, wv.y, wv.z);
+	
+	//TurtleByTHREE.movedAABB.min.chooseMin(toptf.translation);
+	//TurtleByTHREE.movedAABB.max.chooseMax(toptf.translation);
+};
+TurtleByTHREE.rotate = function (axisv, deg) {
+	var toptf = TurtleByTHREE.transformStack.top;
+	toptf.applyRotate(axisv, deg * Math.PI / 180.0);
+};
+TurtleByTHREE.scale = function (sx, sy, sz) {
+	var toptf = TurtleByTHREE.transformStack.top;
+	toptf.applyScale(sx, sy, sz);
+};
+// argument "col" expects "#00112233" style string
+TurtleByTHREE.getMeshMaterial = function (col) {
+	var colid = 'M' + col;
+	var mat = TurtleByTHREE.materials[colid];
+	if(!mat) {
+		var intcol = parseInt('0x' + col.substr(1));
+		mat = new THREE.MeshLambertMaterial({
+			'color':intcol,
+			'shading':THREE.SmoothShading
+		});
+		
+		var obj = new THREE.Mesh(new THREE.Geometry(), mat);
+		TurtleByTHREE.root.add(obj);
+		mat.turtleObj = obj;
+		
+		TurtleByTHREE.materials[colid] = mat;
+	}
+	return mat;
+};
+TurtleByTHREE.getLineMaterial = function (col, w) {
+	var colid = 'L' + col + '_' + w;
+	var mat = TurtleByTHREE.materials[colid];
+	if(!mat) {
+		var intcol = parseInt('0x' + col.substr(1));
+		mat = new THREE.LineBasicMaterial({'color':intcol, 'linewidth':w});
+		
+		var obj = new THREE.Line(new THREE.Geometry(), mat, THREE.LinePieces);
+		TurtleByTHREE.root.add(obj);
+		mat.turtleObj = obj;
+		
+		TurtleByTHREE.materials[colid] = mat;
+	}
+	return mat;
+};
+TurtleByTHREE.addGeometry = function (geom, mat) {
+	var tmpm = TurtleByTHREE.work.m41;
+	TurtleByTHREE.transformStack.top.makeMatrix(tmpm);
+	geom.applyMatrix(tmpm);
+	
+	var obj = mat.turtleObj;
+	
+	// merge geometry
+	var objgeom = obj.geometry;
+	var voffset = objgeom.vertices.length;
+	for(var i = 0; i < geom.vertices.length; i++) {
+		objgeom.vertices.push(geom.vertices[i]);
+	}
+	for(var i = 0; i < geom.faces.length; i++) {
+		var tmpface = geom.faces[i];
+		tmpface.a += voffset;
+		tmpface.b += voffset;
+		tmpface.c += voffset;
+		if(tmpface.d != undefined) tmpface.d += voffset;
+		objgeom.faces.push(tmpface);
+	}
+	
+	/*
+	// AABB <- move to after geometry build.
+	var tmpv = TurtleByTHREE.work.v31;
+	obj.geometry.computeBoundingBox();
+	var bnds = obj.geometry.boundingBox;
+	
+	var checkabb = function (v) {
+		obj.matrix.multiplyVector3(v);
+		TurtleByTHREE.movedAABB.min.chooseMin(v);
+		TurtleByTHREE.movedAABB.max.chooseMax(v);
+	};
+	tmpv.set(bnds.min.x, bnds.min.y, bnds.min.z); checkabb(tmpv);
+	tmpv.set(bnds.max.x, bnds.min.y, bnds.min.z); checkabb(tmpv);
+	tmpv.set(bnds.min.x, bnds.max.y, bnds.min.z); checkabb(tmpv);
+	tmpv.set(bnds.max.x, bnds.max.y, bnds.min.z); checkabb(tmpv);
+	tmpv.set(bnds.min.x, bnds.min.y, bnds.max.z); checkabb(tmpv);
+	tmpv.set(bnds.max.x, bnds.min.y, bnds.max.z); checkabb(tmpv);
+	tmpv.set(bnds.min.x, bnds.max.y, bnds.max.z); checkabb(tmpv);
+	tmpv.set(bnds.max.x, bnds.max.y, bnds.max.z); checkabb(tmpv);
+	*/
+};
+TurtleByTHREE.checkAABB = function () {
+	
+	// AABB
+	var tmpv = TurtleByTHREE.work.v31;
+	var checkabb = function (obj, v) {
+		obj.matrix.multiplyVector3(v);
+		TurtleByTHREE.movedAABB.min.chooseMin(v);
+		TurtleByTHREE.movedAABB.max.chooseMax(v);
+	};
+	
+	for(var key in TurtleByTHREE.materials) {
+		var mat = TurtleByTHREE.materials[key];
+		var obj = mat.turtleObj;
+		obj.geometry.computeBoundingBox();
+		
+		var bnds = obj.geometry.boundingBox;
+		tmpv.set(bnds.min.x, bnds.min.y, bnds.min.z); checkabb(obj, tmpv);
+		tmpv.set(bnds.max.x, bnds.min.y, bnds.min.z); checkabb(obj, tmpv);
+		tmpv.set(bnds.min.x, bnds.max.y, bnds.min.z); checkabb(obj, tmpv);
+		tmpv.set(bnds.max.x, bnds.max.y, bnds.min.z); checkabb(obj, tmpv);
+		tmpv.set(bnds.min.x, bnds.min.y, bnds.max.z); checkabb(obj, tmpv);
+		tmpv.set(bnds.max.x, bnds.min.y, bnds.max.z); checkabb(obj, tmpv);
+		tmpv.set(bnds.min.x, bnds.max.y, bnds.max.z); checkabb(obj, tmpv);
+		tmpv.set(bnds.max.x, bnds.max.y, bnds.max.z); checkabb(obj, tmpv);
+	}
+	
+	// check size 0
+	var aabb = TurtleByTHREE.movedAABB;
+	if(aabb.max.x <= aabb.min.x) {
+		aabb.max.x = 1.0;
+		aabb.min.x = -1.0;
+	}
+	if(aabb.max.y <= aabb.min.y) {
+		aabb.max.y = 1.0;
+		aabb.min.y = -1.0;
+	}
+	if(aabb.max.z <= aabb.min.z) {
+		aabb.max.z = 1.0;
+		aabb.min.z = -1.0;
+	}
+};
+TurtleByTHREE.AABBBounds = function () {
+	var aabb = TurtleByTHREE.movedAABB;
+	/*
+	console.log("aabb:({" + aabb.min.x + " ," + aabb.min.y + " ," + aabb.min.z + "}, {" + aabb.max.x + " ," + aabb.max.y + " ," + aabb.max.z + "})");
+	console.log("root.boundRadius=" + TurtleByTHREE.root.boundRadius);
+	console.log("root.boundRadiusScale=" + TurtleByTHREE.root.boundRadiusScale);
+	*/
+	aabb.obj.position.x = (aabb.max.x + aabb.min.x) * 0.5;
+	aabb.obj.position.y = (aabb.max.y + aabb.min.y) * 0.5;
+	aabb.obj.position.z = (aabb.max.z + aabb.min.z) * 0.5;
+	aabb.obj.scale.x = aabb.max.x - aabb.min.x;
+	aabb.obj.scale.y = aabb.max.y - aabb.min.y;
+	aabb.obj.scale.z = aabb.max.z - aabb.min.z;
+	aabb.obj.visible = true;
+	return aabb.obj;
+};
+
+var VisualizersByTHREE = {
+	'beginBranch': function () {
+		//console.log("beginBranch");
+		TurtleByTHREE.transformStack.push();
+		return 0;
+	},
+	'endBranch': function () {
+		//console.log("endBranch");
+		TurtleByTHREE.transformStack.pop();
+		return 0;
+	},
+	'Translate': function (tx, ty, tz) {
+		TurtleByTHREE.translate(tx, ty, tz);
+		return 0;
+	},
+	'RotBy': function (axis, angle) {
+		//console.log("RotBy");
+		var wv = TurtleByTHREE.work.v30;
+		//var toptf = TurtleByTHREE.transformStack.top;
+		switch(axis) {
+			case 'X':
+				wv.set(1.0, 0.0, 0.0);
+				break;
+			case 'Y':
+				wv.set(0.0, 1.0, 0.0);
+				break;
+			case 'Z':
+				wv.set(0.0, 0.0, 1.0);
+				break;
+		}
+		TurtleByTHREE.rotate(wv, angle);
+		return 0;
+	},
+	'RotFor': function (type, angle) {
+		//console.log("RotFor");
+		var axisv = TurtleByTHREE.work.v30;
+		var upv = TurtleByTHREE.work.v31;
+		var topm = TurtleByTHREE.transformStack.top.rotation;
+		axisv.copy(topm.getColumnY());
+		upv.set(0.0, 1.0, 0.0);
+		var updot = axisv.dot(upv);
+		axisv.crossSelf(upv);
+		var axslen = axisv.length();
+		if(axslen < 0.000001) {
+			// it's neary vertical
+			axisv.set(1.0, 0.0, 0.0);
+			if(updot > 0.0) { //(0, 1, 0)
+				if(type === 'EARTH') {
+					TurtleByTHREE.rotate(axisv, -angle);
+				}
+			}
+			else { //(0, -1, 0)
+				if(type === 'SKY') {
+					TurtleByTHREE.rotate(axisv, angle);
+				}
+			}
+		}
+		else {
+			axisv.divideScalar(axslen); //normalize
+			var ax, ay, az;
+			ax = axisv.dot(topm.getColumnX());
+			ay = axisv.dot(topm.getColumnY());
+			az = axisv.dot(topm.getColumnZ());
+			axisv.set(ax, ay, az);
+			
+			if(type === 'EARTH') {
+				angle *= -1.0;
+				updot *= -1.0;
+			}
+			if(updot > 0.0) {
+				angle *= axslen; // slow fade
+				//angle *= 1.0 - updot; //fast fade
+			}
+			TurtleByTHREE.rotate(axisv, angle);
+		}
+		return 0;
+	},
+	'Scale': function (sx, sy, sz) {
+		TurtleByTHREE.scale(sx, sy, sz);
+		return 0;
+	},
+	/////
+	'drawAsTube': function (topr, btmr, l, col) {
+		//console.log("drawAsTube");
+		var ttl = LSystem.turtle;
+		
+		var rseg = Math.max(6, Math.floor(Math.max(topr, btmr) * 12.0));
+		var geom = new THREE.CylinderGeometry(topr, btmr, l, rseg, 0, false);
+		var wm0 = ttl.work.m40;
+		wm0.makeTranslation(0.0, l * 0.5, 0.0);
+		geom.applyMatrix(wm0);
+		
+		var mat = TurtleByTHREE.getMeshMaterial(col);
+		
+		ttl.addGeometry(geom, mat);
+		ttl.translate(0, l, 0);
+		
+		return 0;
+	},
+	'drawAsCapsule': function (topr, btmr, l, col) {
+		//console.log("drawAsCapsule");
+		var ttl = LSystem.turtle;
+		
+		var rseg = Math.max(6, Math.floor(Math.max(topr, btmr) * 12.0));
+		var topangle = Math.acos((btmr - topr) / l);
+		var btmangle = Math.PI - topangle;
+		
+		var vdiv = Math.ceil(rseg * 0.5);
+		var topdiv = Math.round(vdiv * topangle / Math.PI);
+		var btmdiv = vdiv - topdiv;
+		
+		// base line
+		var vbases = [];
+		// top
+		for(var i = 1; i <= topdiv; i++) {
+			var angle = i / topdiv * topangle;
+			var tmp = {};
+			tmp.n = new THREE.Vector2(Math.sin(angle), Math.cos(angle));
+			tmp.v = tmp.n.clone().multiplyScalar(topr);
+			tmp.v.y += l;
+			vbases.push(tmp);
+		}
+		// bottom
+		for(var i = 0; i < btmdiv; i++) {
+			var angle = topangle + i / btmdiv * btmangle;
+			var tmp = {};
+			tmp.n = new THREE.Vector2(Math.sin(angle), Math.cos(angle));
+			tmp.v = tmp.n.clone().multiplyScalar(btmr);
+			vbases.push(tmp);
+		}
+		
+		var geom = new THREE.Geometry();
+		var normals = [];
+		
+		// vertices
+		var baselen = vbases.length;
+		for(var iseg = 0; iseg < rseg; iseg++) {
+			var segangle = Math.PI * 2.0 * iseg / rseg;
+			var segsin = Math.sin(segangle);
+			var segcos = Math.cos(segangle);
+			
+			for(var ibase = 0; ibase < baselen; ibase++) {
+				var basev = vbases[ibase].v;
+				var basen = vbases[ibase].n;
+				var tmpv;
+				// vertex
+				tmpv = new THREE.Vector3();
+				tmpv.x = segsin * basev.x;
+				tmpv.y = basev.y;
+				tmpv.z = segcos * basev.x;
+				geom.vertices.push(tmpv);
+				// normal
+				tmpv = new THREE.Vector3();
+				tmpv.x = segsin * basen.x;
+				tmpv.y = basen.y;
+				tmpv.z = segcos * basen.x;
+				normals.push(tmpv.normalize());
+			}
+		}
+		// polar vertices
+		var toppid = geom.vertices.push(new THREE.Vector3(0.0, l + topr, 0.0)) - 1;
+		normals.push(new THREE.Vector3(0.0, 1.0, 0.0))
+		var btmpid = geom.vertices.push(new THREE.Vector3(0.0, -btmr, 0.0)) - 1;
+		normals.push(new THREE.Vector3(0.0, -1.0, 0.0))
+		
+		// faces
+		var baselen = vbases.length;
+		for(var i = 0; i < rseg; i++) {
+			var inext = (i + 1) % rseg;
+			
+			// top and bottom fan
+			for(var j = 0; j < 2; j++) {
+				var tmpf;
+				var aid, bid, cid;
+				if(j == 0) { //top
+					aid = toppid;
+					bid = i * baselen;
+					cid = inext * baselen;
+				} else { //bottom
+					aid = btmpid;
+					bid = inext * baselen + baselen - 1;
+					cid = i * baselen + baselen - 1;
+				}
+				var na = normals[aid].clone();
+				var nb = normals[bid].clone();
+				var nc = normals[cid].clone();
+				tmpf = new THREE.Face3(aid, bid, cid, [na, nb, nc]);
+				geom.faces.push(tmpf);
+			}
+			// middle
+			for(var iv = 0; iv < baselen - 1; iv++) {
+				var aid = i * baselen + iv;
+				var bid = i * baselen + iv + 1;
+				var cid = inext * baselen + iv + 1;
+				var did = inext * baselen + iv;
+				var na = normals[aid].clone();
+				var nb = normals[bid].clone();
+				var nc = normals[cid].clone();
+				var nd = normals[did].clone();
+				tmpf = new THREE.Face4(aid, bid, cid, did, [na, nb, nc, nd]);
+				geom.faces.push(tmpf);
+			}
+		}
+		geom.computeCentroids();
+		geom.computeFaceNormals();
+		
+		var mat = TurtleByTHREE.getMeshMaterial(col);
+		
+		ttl.addGeometry(geom, mat);
+		ttl.translate(0, l, 0);
+		
+		return 0;
+	},
+	'drawAsSphere': function (r, col) {
+		//console.log("drawAsSphere");
+		var ttl = LSystem.turtle;
+		
+		var rseg = Math.max(4, Math.floor(r * 12.0));
+		var geom = new THREE.SphereGeometry(r, rseg, Math.floor(rseg));
+		var wm0 = ttl.work.m40;
+		wm0.makeTranslation(0.0, r, 0.0);
+		geom.applyMatrix(wm0);
+		
+		var mat = TurtleByTHREE.getMeshMaterial(col);
+		
+		ttl.addGeometry(geom, mat);
+		ttl.translate(0, r * 2.0, 0);
+		
+		return 0;
+	},
+	'drawAsEllipsoid': function (w, h, d, col) {
+		//console.log("drawAsEllipsoid");
+		var ttl = LSystem.turtle;
+		
+		var rseg = Math.max(4, Math.floor(Math.max(Math.max(w, h), d) * 6.0));
+		var geom = new THREE.SphereGeometry(0.5, rseg, Math.floor(rseg));
+		var wm0 = ttl.work.m40;
+		var wv0 = ttl.work.v30;
+		wm0.makeScale(w, h, d);
+		wv0.set(0.0, 0.5, 0.0);
+		wm0.translate(wv0);
+		geom.applyMatrix(wm0);
+		
+		var mat = TurtleByTHREE.getMeshMaterial(col);
+		
+		ttl.addGeometry(geom, mat);
+		ttl.translate(0, h, 0);
+		
+		return 0;
+	},
+	/*
+	'drawAsCone': function (topr, btmr, h, col) {
+		console.log("drawAsCone");
+		LSystem.turtle.translate(0, h, 0);
+		return 0;
+	},
+	*/
+	'drawAsCube': function (w, h, d, col) {
+		//console.log("drawAsCube");
+		var ttl = LSystem.turtle;
+		
+		var geom = new THREE.CubeGeometry(w, h, d);
+		var wm0 = ttl.work.m40;
+		wm0.makeTranslation(0.0, h * 0.5, 0.0);
+		geom.applyMatrix(wm0);
+		
+		var mat = TurtleByTHREE.getMeshMaterial(col);
+		
+		ttl.addGeometry(geom, mat);
+		ttl.translate(0, h, 0);
+		
+		return 0;
+	},
+	'drawAsPlane': function (w, h, col) {
+		//console.log("drawAsPlane");
+		var ttl = LSystem.turtle;
+		var geom = new THREE.Geometry();
+		geom.vertices.push(new THREE.Vector3(w *  0.5, h, 0.0));
+		geom.vertices.push(new THREE.Vector3(w * -0.5, h, 0.0));
+		geom.vertices.push(new THREE.Vector3(w * -0.5, 0.0, 0.0));
+		geom.vertices.push(new THREE.Vector3(w *  0.5, 0.0, 0.0));
+		
+		geom.faces.push(new THREE.Face4(0, 1, 2, 3, new THREE.Vector3(0.0, 0.0, 1.0)));
+		geom.faces.push(new THREE.Face4(3, 2, 1, 0, new THREE.Vector3(0.0, 0.0, -1.0)));
+		
+		var mat = TurtleByTHREE.getMeshMaterial(col);
+		
+		ttl.addGeometry(geom, mat);
+		ttl.translate(0, h, 0);
+		return 0;
+	},
+	'drawAsCircle': function (r, col) {
+		//console.log("drawAsCircle");
+		var ttl = LSystem.turtle;
+		
+		var rdiv = Math.max(4, Math.floor(r * 12.0));
+		var geom = new THREE.Geometry();
+		geom.vertices.push(new THREE.Vector3(0.0, r, 0.0));
+		for(var i = 0; i < rdiv; i++) {
+			var angle = i / rdiv * Math.PI * 2.0;
+			var tmpv = new THREE.Vector3(0.0, 0.0, 0.0);
+			tmpv.x = Math.cos(angle) * r;
+			tmpv.y = Math.sin(angle) * r + r;
+			geom.vertices.push(tmpv);
+		}
+		
+		for(var i = 0; i < rdiv; i++) {
+			var tmpf = new Face3(0, i + 1, (i + 1) % rdiv + 1, new THREE.Vector3(0.0, 0.0, 1.0));
+			geom.faces.push(tmpf);
+			geom.faces.push(tmpf.clone().flip());
+		}
+		
+		var mat = TurtleByTHREE.getMeshMaterial(col);
+		
+		ttl.addGeometry(geom, mat);
+		tl.translate(0, r * 2.0, 0);
+		
+		return 0;
+	},
+	'drawAsOval': function (w, h, col) {
+		//console.log("drawAsOval");
+		var ttl = LSystem.turtle;
+		
+		var rdiv = Math.max(4, Math.floor(Math.max(w, h) * 12.0));
+		var geom = new THREE.Geometry();
+		geom.vertices.push(new THREE.Vector3(0.0, h * 0.5, 0.0));
+		for(var i = 0; i < rdiv; i++) {
+			var angle = i / rdiv * Math.PI * 2.0;
+			var tmpv = new THREE.Vector3(0.0, 0.0, 0.0);
+			tmpv.x = Math.cos(angle) * w * 0.5;
+			tmpv.y = (Math.sin(angle) * h + h) * 0.5;
+			geom.vertices.push(tmpv);
+		}
+		
+		for(var i = 0; i < rdiv; i++) {
+			var tmpf = new Face3(0, i + 1, (i + 1) % rdiv + 1, new THREE.Vector3(0.0, 0.0, 1.0));
+			geom.faces.push(tmpf);
+			geom.faces.push(tmpf.clone().flip());
+		}
+		
+		var mat = TurtleByTHREE.getMeshMaterial(col);
+		
+		ttl.addGeometry(geom, mat);
+		tl.translate(0, h, 0);
+		
+		return 0;
+	},
+	'drawAsPolygon': function (vnum, w, h, col) {
+		//console.log("drawAsPolygon");
+		var ttl = LSystem.turtle;
+		
+		var geom = new THREE.Geometry();
+		geom.vertices.push(new THREE.Vector3(0.0, 0.0, 0.0));
+		var miny = 0.0;
+		for(var i = 0; i < vnum; i++) {
+			var angle = i / vnum * Math.PI * 2.0;
+			var tmpv = new THREE.Vector3(0.0, 0.0, 0.0);
+			tmpv.x = -Math.sin(angle) * w * 0.5;
+			tmpv.y =  Math.cos(angle) * h * 0.5;
+			miny = Math.min(miny, tmpv.y);
+			geom.vertices.push(tmpv);
+		}
+		for(var i = 0; i < geom.vertices.length; i++) {
+			geom.vertices[i].y -= miny;
+		}
+		
+		for(var i = 0; i < vnum; i++) {
+			var tmpf = new Face3(0, i + 1, (i + 1) % vnum + 1, new THREE.Vector3(0.0, 0.0, 1.0));
+			geom.faces.push(tmpf);
+			geom.faces.push(tmpf.clone().flip());
+		}
+		
+		var mat = TurtleByTHREE.getMeshMaterial(col);
+		
+		ttl.addGeometry(geom, mat);
+		tl.translate(0, h, 0);
+		
+		return 0;
+	},
+	'drawAsLine': function (l, w, col) {
+		//console.log("drawAsLine");
+		var ttl = LSystem.turtle;
+		
+		var geom = new THREE.Geometry();
+		geom.vertices.push(new THREE.Vector3(0.0, 0.0, 0.0));
+		geom.vertices.push(new THREE.Vector3(0.0, l, 0.0));
+		
+		var mat = TurtleByTHREE.getLineMaterial(col, w);
+		
+		ttl.addGeometry(geom, mat);
+		ttl.translate(0, l, 0);
+		
+		return 0;
+	},
+	'drawAsPoint': function (s, col) { //This is a small(1/100) size sphere.
+		//console.log("drawAsPoint");
+		var ttl = LSystem.turtle;
+		
+		var r = s * 0.5 * 0.001;
+		var rseg = Math.max(6, Math.floor(r * 8.0));
+		var geom = new THREE.SphereGeometry(r, rseg, Math.floor(rseg));
+		var mat = TurtleByTHREE.getMeshMaterial(col);
+		
+		ttl.addGeometry(geom, mat);
+		//ttl.translate(0, s, 0); // no translation
+		
+		return 0;
+	}
+};
+
+//
+var ViewerSpec = {
+	'renderer':null,
+	'control':null,
+	'scene':null,
+	'camera':null,
+	'lights':{
+		'ambient':null,
+		'main':null
+	},
+	'gridRoot':null,
+	'turtleRoot':null
+};
+
+function init() {
+	var viewdom = document.getElementById("viewportDiv");
+	var vpw = viewdom.clientWidth; //window.innerWidth - 4,
+	    vph = viewdom.clientHeight; //window.innerHeight - 4; // GL Context that bigger than frame size is not draw?
+	
+	// lights
+	var ambientLight, mainLight;
+	ambientLight = new THREE.AmbientLight(0x202020);
+	ViewerSpec.lights.ambient = ambientLight;
+	
+	mainLight = new THREE.PointLight(0xffffff);
+	mainLight.position.set(1.0, 2.0, 1.0);
+	ViewerSpec.lights.main = mainLight;
+	
+	// camera
+	var camera;
+	camera = new THREE.PerspectiveCamera(60, vpw / vph, 0.1, 1000.0);
+	camera.add(mainLight);
+	ViewerSpec.camera = camera;
+	
+	//grid
+	var GRID_SIZE = 10;
+	
+	var gridroot = new THREE.Object3D();
+	var gridgeom, gridmat, gridobj;
+	// X
+	gridgeom = new THREE.Geometry();
+	gridgeom.vertices.push(new THREE.Vector3(-GRID_SIZE, 0.0, 0.0));
+	gridgeom.vertices.push(new THREE.Vector3( GRID_SIZE, 0.0, 0.0));
+	gridmat = new THREE.LineBasicMaterial({'color':0xff0000});
+	gridobj = new THREE.Line(gridgeom, gridmat);
+	gridroot.add(gridobj);
+	// Y
+	gridgeom = new THREE.Geometry();
+	// gridgeom.vertices.push(new THREE.Vector3(0.0, -GRID_SIZE, 0.0));
+	// gridgeom.vertices.push(new THREE.Vector3(0.0,  GRID_SIZE, 0.0));
+	gridgeom.vertices.push(new THREE.Vector3(0.0, -1.0, 0.0));
+	gridgeom.vertices.push(new THREE.Vector3(0.0,  1.0, 0.0));
+	gridmat = new THREE.LineBasicMaterial({'color':0x00ff00});
+	gridobj = new THREE.Line(gridgeom, gridmat);
+	gridroot.add(gridobj);
+	// Z
+	gridgeom = new THREE.Geometry();
+	gridgeom.vertices.push(new THREE.Vector3(0.0, 0.0, -GRID_SIZE));
+	gridgeom.vertices.push(new THREE.Vector3(0.0, 0.0,  GRID_SIZE));
+	gridmat = new THREE.LineBasicMaterial({'color':0x0000ff});
+	gridobj = new THREE.Line(gridgeom, gridmat);
+	gridroot.add(gridobj);
+	
+	// x-z lines
+	gridgeom = new THREE.Geometry();
+	gridmat = new THREE.LineBasicMaterial({'color':0x999999});
+	for(var i = 1; i <= GRID_SIZE; i++) {
+		gridgeom.vertices.push(new THREE.Vector3( i, 0.0, -GRID_SIZE));
+		gridgeom.vertices.push(new THREE.Vector3( i, 0.0,  GRID_SIZE));
+		gridgeom.vertices.push(new THREE.Vector3(-i, 0.0, -GRID_SIZE));
+		gridgeom.vertices.push(new THREE.Vector3(-i, 0.0,  GRID_SIZE));
+		gridgeom.vertices.push(new THREE.Vector3(-GRID_SIZE, 0.0,  i));
+		gridgeom.vertices.push(new THREE.Vector3( GRID_SIZE, 0.0,  i));
+		gridgeom.vertices.push(new THREE.Vector3(-GRID_SIZE, 0.0, -i));
+		gridgeom.vertices.push(new THREE.Vector3( GRID_SIZE, 0.0, -i));
+	}
+	gridmat = new THREE.LineBasicMaterial(0x0000ff);
+	gridobj = new THREE.Line(gridgeom, gridmat, THREE.LinePieces);
+	gridroot.add(gridobj);
+	
+	ViewerSpec.gridRoot = gridroot;
+	
+	var scene = new THREE.Scene();
+	// add camera
+	camera.position.set(4.0, 4.0, 10.0);
+	//camera.position.set(0.0, 0.0, 10.0);
+	camera.lookAt(scene.position);
+	camera.initialDir = camera.position.clone();
+	camera.initialDir.normalize();
+	scene.add(camera);
+	
+	// add lights
+	scene.add(ambientLight);
+	// scene.add(mainLight); //child of camera
+	
+	//add objects
+	scene.add(gridroot);
+	
+	/*
+	//+++++
+	var ge = new THREE.CubeGeometry(1, 1, 1);
+	var ma = new THREE.MeshLambertMaterial({'color':0x9999cc});
+	var me = new THREE.Mesh(ge, ma);
+	me.position.set(0.0, 0.0, 0.0);
+	scene.add(me);
+	
+	ge = new THREE.SphereGeometry(0.5, 12, 6);
+	ma = new THREE.MeshLambertMaterial({'color':0xcc9999});
+	me = new THREE.Mesh(ge, ma);
+	me.position.set(1.5, 0.0, 0.0);
+	scene.add(me);
+	//+++++
+	*/
+	
+	ViewerSpec.scene = scene;
+	
+	//
+	var renderer;
+	renderer = new THREE.WebGLRenderer({'alpha':false, 'clearColor':0x808080, 'clearAlpha':1});
+	renderer.setSize(vpw, vph);
+	viewdom.appendChild(renderer.domElement);
+	ViewerSpec.renderer = renderer;
+	
+	//var control = new THREE.TrackballControls(camera, renderer.domElement);
+	var control = new THREE.TrackballControlsB(camera, renderer.domElement);
+	control.rotateSpeed = 1.0;
+	control.zoomSpeed = 1.2;
+	control.panSpeed = 0.8;
+	control.nonZoom = false;
+	control.noPan = false;
+	control.staticMoving = true;
+	control.dynamicDampingFactor = 0.3;
+	control.addEventListener('change', render);
+	control.target.copy(scene.position);
+	ViewerSpec.control = control;
+	
+	//render();
+}
+
+function animate() {
+	requestAnimationFrame(animate);
+	ViewerSpec.control.update();
+	/*
+	if(ViewerSpec.control) {
+		var dbgtxt = document.getElementById("dbgTxtInp");
+		
+		var choprank = function (n) { return Math.floor(n * 1000.0) / 1000.0; };
+		var camprm, dbgstr = "";
+		camprm = ViewerSpec.camera.position;
+		dbgstr += 'pos(' + choprank(camprm.x) + ',' + choprank(camprm.y) + ',' + choprank(camprm.z) + ')';
+		camprm = ViewerSpec.camera.rotation;
+		dbgstr += ', rot(' + choprank(camprm.x) + ',' + choprank(camprm.y) + ',' + choprank(camprm.z) + ')';
+		camprm = ViewerSpec.camera.up;
+		dbgstr += ', up(' + choprank(camprm.x) + ',' + choprank(camprm.y) + ',' + choprank(camprm.z) + ')';
+		dbgtxt.value = dbgstr;
+	}
+	*/
+}
+
+function render() {
+	var scene, camera;
+	scene = ViewerSpec.scene;
+	camera = ViewerSpec.camera;
+	ViewerSpec.renderer.render(scene, camera);
+}
+
+///// invocked from parent
+function setLSystemSource(srctxt) {
+	refreshLSystem(srctxt);
+}
+
+///// local functions
+function visualizeCurrentLSystem() { // visualize
+	if(TurtleByTHREE.root) {
+		ViewerSpec.scene.remove(TurtleByTHREE.root);
+	}
+	TurtleByTHREE.reset();
+	LSystem.visualize();
+	TurtleByTHREE.checkAABB();
+	
+	ViewerSpec.scene.add(TurtleByTHREE.root);
+	//TurtleByTHREE.AABBBounds();
+	//ViewerSpec.scene.add(TurtleByTHREE.AABBBounds());
+}
+
+function refreshLSystem(srctxt) {
+	if(!srctxt) {
+		if(!window.parent || !window.parent.getLSystemSource) return;
+		var srctxt = window.parent.getLSystemSource();
+	}
+	
+	//window.parent.showOverlayTextArea("LSystem", srctxt);
+	
+	try {
+		// init
+		LSystem.clear();
+		eval(srctxt);
+		
+		// grow
+		//var dbgstr = "--- source ---\n" + srctxt + "\n";
+		//dbgstr += "--- start ---\n" + LSystem.context.curState;
+		LSystem.grow();
+		//dbgstr += "\n--- step:" + LSystem.context.stepCount + " ---\n" + LSystem.context.curState;
+		//window.parent.showOverlayTextArea("LSystem", dbgstr);
+		
+		visualizeCurrentLSystem();
+		
+		inFrameCamera(false);
+	} catch (e) {
+		console.log("LSystem refresh error:" + e);
+	}
+	
+	render();
+	
+	//document.getElementById('viewportDiv').innerHTML = '<textarea style="width:100%;height:100%;">' + srctxt + '\n-----\n' + LSystem.context.curState + '</textarea>';
+}
+
+/*
+function growLSystem() {
+	var tmpstr = '--- step:' + LSystem.context.stepCount + ' ---\n' + LSystem.context.curState;
+	LSystem.grow();
+	tmpstr += '\n--- step:' + LSystem.context.stepCount + ' ---\n' + LSystem.context.curState;
+	//document.getElementById('viewportDiv').innerHTML = '<textarea style="width:100%;height:100%;">' + tmpstr + '</textarea>';
+}
+
+function resetLSystem() {
+	LSystem.reset();
+	//document.getElementById('viewportDiv').innerHTML = '<textarea style="width:100%;height:100%;">' + LSystem.context.curState + '</textarea>';
+}
+*/
+function resetCamera() {
+	/*
+	var l = ViewerSpec.camera.position.length();
+	ViewerSpec.camera.position.copy(ViewerSpec.camera.initialDir);
+	ViewerSpec.camera.position.multiplyScalar(l);
+	ViewerSpec.camera.up.set(0.0, 1.0, 0.0);
+	ViewerSpec.control.target.copy(ViewerSpec.scene.position);
+	*/
+	inFrameCamera();
+}
+function inFrameCamera() {
+	var aabb = TurtleByTHREE.movedAABB;
+	var camdirX = ViewerSpec.camera.position.x - ViewerSpec.control.target.x,
+	    camdirY = ViewerSpec.camera.position.y - ViewerSpec.control.target.y,
+	    camdirZ = ViewerSpec.camera.position.z - ViewerSpec.control.target.z;
+	
+	ViewerSpec.camera.up.set(0.0, 1.0, 0.0);
+	ViewerSpec.control.target.x = (aabb.max.x + aabb.min.x) * 0.5;
+	ViewerSpec.control.target.y = (aabb.max.y + aabb.min.y) * 0.5;
+	ViewerSpec.control.target.z = (aabb.max.z + aabb.min.z) * 0.5;
+	
+	var aabbR = (aabb.max.x - aabb.min.x) * (aabb.max.x - aabb.min.x);
+	aabbR += (aabb.max.y - aabb.min.y) * (aabb.max.y - aabb.min.y);
+	aabbR += (aabb.max.z - aabb.min.z) * (aabb.max.z - aabb.min.z);
+	aabbR = Math.sqrt(aabbR) * 0.5;
+	aabbR *= 1.25; // some bias
+	ViewerSpec.camera.position.set(camdirX, camdirY, camdirZ);
+	ViewerSpec.camera.position.normalize();
+	ViewerSpec.camera.position.multiplyScalar(aabbR / Math.tan(ViewerSpec.camera.fov * 0.5 * Math.PI / 180.0));
+	ViewerSpec.camera.position.addSelf(ViewerSpec.control.target);
+}
+
+function dumpAsObj() {
+	var objstr = "# Blockoly genetated\n";
+	var vcnt = 1;
+	for(var key in TurtleByTHREE.materials) {
+		objstr += "g " + key.replace('#', '_') + "\n";
+		var geom = TurtleByTHREE.materials[key].turtleObj.geometry;
+		if(key[0] == 'M') {
+			//console.log(key + " is mesh. v:" + geom.vertices.length + ", f:" + geom.faces.length);
+			for(var i = 0; i < geom.vertices.length; i++) {
+				var tmpv = geom.vertices[i];
+				objstr += "v " + tmpv.x + " " + tmpv.y + " " + tmpv.z + "\n";
+			}
+			for(var i = 0; i < geom.faces.length; i++) {
+				var tmpf = geom.faces[i];
+				objstr += "f " + (tmpf.a + vcnt) + " " + (tmpf.b + vcnt) + " " + (tmpf.c + vcnt);
+				if(tmpf.d !== undefined) objstr += " " + (tmpf.d + vcnt);
+				objstr += "\n";
+			}
+		}
+		else if(key[0] == 'L') {
+			//console.log(key + " is line. v:" + geom.vertices.length);
+			for(var i = 0; i < geom.vertices.length; i++) {
+				var tmpv = geom.vertices[i];
+				objstr += "v " + tmpv.x + " " + tmpv.y + " " + tmpv.z + "\n";
+			}
+			for(var i = 0; i < geom.vertices.length; i+=2) {
+				objstr += "f " + (i + vcnt) + " " + (i + 1 + vcnt) + "\n";
+			}
+		}
+		vcnt += geom.vertices.length;
+	}
+	
+	if(window.parent && window.parent.getLSystemSource) {
+		window.parent.showOverlayTextArea("wavefront obj", objstr, null, null, null, null, true);
+	}
+}
+
+/////
+function initViewer() {
+	// console.log("init viewer");
+	extendTHREE();
+	
+	// LSystem setup
+	LSystem.setVisualizers(VisualizersByTHREE, TurtleByTHREE);
+	
+	// THREE setup
+	init();
+	animate();
+}
+window.addEventListener('load', initViewer);
+
+</script>
+
+<style>
+html, body {
+	background-color: #666;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+}
+
+table {
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	padding: 0;
+}
+
+#viewportDiv {
+	width: 100%;
+	height: 100%;
+}
+</style>
+
+</head>
+<body>
+<table>
+<tr><td><div id="viewportDiv"></div></td></tr>
+<tr height="64px"><td>
+<div id="toolPanel">
+<button type="button" onclick="refreshLSystem(null)">Reflesh</button>
+<!--
+<button type="button" onclick="resetLSystem()">Reset</button>
+<button type="button" onclick="growLSystem()">Grow one step</button>
+-->
+<button type="button" onclick="resetCamera()">Camera Reset</button>
+<!-- br><input id="dbgTxtInp" type="text" style="width:100%"></input -->
+<button type="button" onclick="dumpAsObj()">Dump as .obj</button>
+</div>
+</td></tr>
+</table>
+</body>
+</html>

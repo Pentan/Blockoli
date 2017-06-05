@@ -1,0 +1,150 @@
+<xml>
+  <block type="lsystem_symbol_def" x="46" y="-86">
+    <title name="NAME">C</title>
+    <statement name="RULES">
+      <block type="lsystem_symbol_ref">
+        <title name="SYMBOL">C</title>
+      </block>
+    </statement>
+    <statement name="VISUALS">
+      <block type="visualize_cube" inline="false">
+        <title name="COLOR">#0000ff</title>
+      </block>
+    </statement>
+    <next>
+      <block type="lsystem_symbol_def">
+        <title name="NAME">A</title>
+        <statement name="RULES">
+          <block type="lsystem_random_choice" inline="false">
+            <mutation rules="2"></mutation>
+            <statement name="RULE0">
+              <block type="lsystem_symbol_ref">
+                <title name="SYMBOL">A</title>
+                <next>
+                  <block type="lsystem_rotate_axis" inline="false">
+                    <title name="AXIS">X</title>
+                    <value name="ANGLE">
+                      <block type="math_number">
+                        <title name="NUM">20</title>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="lsystem_symbol_ref">
+                        <title name="SYMBOL">A</title>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <statement name="RULE1">
+              <block type="lsystem_symbol_ref">
+                <title name="SYMBOL">B</title>
+                <next>
+                  <block type="lsystem_rotate_axis" inline="false">
+                    <title name="AXIS">Y</title>
+                    <value name="ANGLE">
+                      <block type="math_number">
+                        <title name="NUM">30</title>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="lsystem_symbol_ref">
+                        <title name="SYMBOL">B</title>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </statement>
+        <statement name="VISUALS">
+          <block type="visualize_sphere" inline="false">
+            <title name="COLOR">#ffff99</title>
+          </block>
+        </statement>
+        <next>
+          <block type="lsystem_symbol_def">
+            <title name="NAME">B</title>
+            <statement name="RULES">
+              <block type="lsystem_random_choice" inline="false">
+                <mutation rules="3"></mutation>
+                <statement name="RULE0">
+                  <block type="lsystem_rotate_axis" inline="false">
+                    <title name="AXIS">Z</title>
+                    <value name="ANGLE">
+                      <block type="math_number">
+                        <title name="NUM">40</title>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="lsystem_symbol_ref">
+                        <title name="SYMBOL">A</title>
+                        <next>
+                          <block type="lsystem_symbol_ref">
+                            <title name="SYMBOL">B</title>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <statement name="RULE1">
+                  <block type="lsystem_rotate_axis" inline="false">
+                    <title name="AXIS">X</title>
+                    <value name="ANGLE">
+                      <block type="math_number">
+                        <title name="NUM">60</title>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="lsystem_symbol_ref">
+                        <title name="SYMBOL">B</title>
+                        <next>
+                          <block type="lsystem_symbol_ref">
+                            <title name="SYMBOL">A</title>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <statement name="RULE2">
+                  <block type="lsystem_rotate_axis" inline="false">
+                    <title name="AXIS">Z</title>
+                    <value name="ANGLE">
+                      <block type="math_number">
+                        <title name="NUM">60</title>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="lsystem_symbol_ref">
+                        <title name="SYMBOL">C</title>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+              </block>
+            </statement>
+            <statement name="VISUALS">
+              <block type="visualize_tube" inline="false">
+                <title name="COLOR">#ffccff</title>
+              </block>
+            </statement>
+            <next>
+              <block type="lsystem_init">
+                <title name="STEPS">6</title>
+                <statement name="INIT_STATE">
+                  <block type="lsystem_symbol_ref">
+                    <title name="SYMBOL">A</title>
+                  </block>
+                </statement>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>
