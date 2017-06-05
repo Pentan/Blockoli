@@ -7,7 +7,7 @@
 
 <script type="text/javascript" src="blockly/generators/javascript/math.js"></script>
 
-<!-- <script type="text/javascript" src="sample.js"></script> -->
+<script type="text/javascript" src="sample.js"></script>
 <script type="text/javascript" src="language.js"></script>
 <script type="text/javascript" src="blockly/language/en/_messages.js"></script>
 <script type="text/javascript" src="blockly/language/common/math.js"></script>
@@ -179,10 +179,7 @@ function initEditor() {
 	});
 	//window.addEventListener('blocklySelectChange', selectedBlockChanged);
 
-	//loadXMLSrcInput(sample_xml);
-	var sample_dom = document.getElementById('default_sample');
-	Blockly.Xml.domToWorkspace(Blockly.mainWorkspace, sample_dom);
-	LCodeEditor.rebuildSymbolDataBase(Blockly.mainWorkspace);
+	loadXMLSrcInput(sample_xml);
 }
 window.addEventListener('load', initEditor);
 </script>
@@ -273,164 +270,4 @@ button.xmlPanelItem {
 	</table>
 	</div>
 </div>
-<xml id="default_sample">
-  <block type="lsystem_symbol_def" x="8" y="45">
-    <title name="NAME">A</title>
-    <statement name="RULES">
-      <block type="lsystem_symbol_ref">
-        <title name="SYMBOL">B</title>
-        <next>
-          <block type="lsystem_branch">
-            <statement name="RULE">
-              <block type="lsystem_rotate_axis" inline="false">
-                <title name="AXIS">X</title>
-                <value name="ANGLE">
-                  <block type="math_number">
-                    <title name="NUM">30</title>
-                  </block>
-                </value>
-                <next>
-                  <block type="lsystem_symbol_ref">
-                    <title name="SYMBOL">A</title>
-                  </block>
-                </next>
-              </block>
-            </statement>
-            <next>
-              <block type="lsystem_rotate_axis" inline="false">
-                <title name="AXIS">Y</title>
-                <value name="ANGLE">
-                  <block type="math_arithmetic" inline="true">
-                    <title name="OP">MULTIPLY</title>
-                    <value name="A">
-                      <block type="math_random_float"></block>
-                    </value>
-                    <value name="B">
-                      <block type="math_number">
-                        <title name="NUM">180</title>
-                      </block>
-                    </value>
-                  </block>
-                </value>
-                <next>
-                  <block type="lsystem_symbol_ref">
-                    <title name="SYMBOL">A</title>
-                  </block>
-                </next>
-              </block>
-            </next>
-          </block>
-        </next>
-      </block>
-    </statement>
-    <statement name="VISUALS">
-      <block type="visualize_sphere" inline="false">
-        <title name="COLOR">#336600</title>
-        <value name="RADIUS">
-          <block type="math_number">
-            <title name="NUM">2</title>
-          </block>
-        </value>
-      </block>
-    </statement>
-    <next>
-      <block type="lsystem_symbol_def">
-        <title name="NAME">B</title>
-        <statement name="RULES">
-          <block type="lsystem_rotate_axis" inline="false">
-            <title name="AXIS">Y</title>
-            <value name="ANGLE">
-              <block type="math_arithmetic" inline="true">
-                <title name="OP">ADD</title>
-                <value name="A">
-                  <block type="math_number">
-                    <title name="NUM">100</title>
-                  </block>
-                </value>
-                <value name="B">
-                  <block type="math_arithmetic" inline="true">
-                    <title name="OP">MULTIPLY</title>
-                    <value name="A">
-                      <block type="math_random_float"></block>
-                    </value>
-                    <value name="B">
-                      <block type="math_number">
-                        <title name="NUM">40</title>
-                      </block>
-                    </value>
-                  </block>
-                </value>
-              </block>
-            </value>
-            <next>
-              <block type="lsystem_symbol_ref">
-                <title name="SYMBOL">C</title>
-              </block>
-            </next>
-          </block>
-        </statement>
-        <statement name="VISUALS">
-          <block type="visualize_capsule" inline="false">
-            <title name="COLOR">#99cc33</title>
-            <value name="TOP_R">
-              <block type="math_number">
-                <title name="NUM">0.5</title>
-              </block>
-            </value>
-            <value name="BOTTOM_R">
-              <block type="math_number">
-                <title name="NUM">0.75</title>
-              </block>
-            </value>
-            <value name="LENGTH">
-              <block type="math_number">
-                <title name="NUM">3</title>
-              </block>
-            </value>
-          </block>
-        </statement>
-        <next>
-          <block type="lsystem_symbol_def">
-            <title name="NAME">C</title>
-            <statement name="RULES">
-              <block type="lsystem_symbol_ref">
-                <title name="SYMBOL">C</title>
-              </block>
-            </statement>
-            <statement name="VISUALS">
-              <block type="visualize_capsule" inline="false">
-                <title name="COLOR">#669900</title>
-                <value name="TOP_R">
-                  <block type="math_number">
-                    <title name="NUM">0.75</title>
-                  </block>
-                </value>
-                <value name="BOTTOM_R">
-                  <block type="math_number">
-                    <title name="NUM">0.75</title>
-                  </block>
-                </value>
-                <value name="LENGTH">
-                  <block type="math_number">
-                    <title name="NUM">1</title>
-                  </block>
-                </value>
-              </block>
-            </statement>
-            <next>
-              <block type="lsystem_init">
-                <title name="STEPS">6</title>
-                <statement name="INIT_STATE">
-                  <block type="lsystem_symbol_ref">
-                    <title name="SYMBOL">A</title>
-                  </block>
-                </statement>
-              </block>
-            </next>
-          </block>
-        </next>
-      </block>
-    </next>
-  </block>
-</xml>
 </html>
